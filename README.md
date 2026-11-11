@@ -123,16 +123,19 @@ cp .env.example .env
 
 ```bash
 # Option A — using the Flask CLI
-flask --app run run --debug
+flask --app run run --debug --port 5001
 
-# Option B — directly with Python
+# Option B — directly with Python (recommended)
 python run.py
 ```
 
 Open your browser at:
 
-- **Homepage:** <http://localhost:5000/>
-- **Health check:** <http://localhost:5000/health>
+- **Homepage:** <http://localhost:5001/>
+- **Health check:** <http://localhost:5001/health>
+
+> **Why port 5001?** macOS reserves port 5000 for the AirPlay Receiver service.
+> To use a different port: `FLASK_PORT=8080 python run.py`
 
 ---
 
@@ -166,3 +169,4 @@ docker compose up
 ## License
 
 [MIT](LICENSE)
+
