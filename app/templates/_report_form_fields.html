@@ -1,0 +1,76 @@
+    <!-- Title -->
+    <div class="form-group {{ 'has-error' if errors.title }}">
+      <label for="title">Item Name <span class="required">*</span></label>
+      <input type="text" id="title" name="title"
+             value="{{ form_data.get('title', '') }}"
+             placeholder="e.g. Black leather wallet, Blue water bottle"
+             maxlength="120" class="form-control" required />
+      {% if errors.title %}<span class="error-msg">{{ errors.title }}</span>{% endif %}
+    </div>
+
+    <!-- Category -->
+    <div class="form-group {{ 'has-error' if errors.category }}">
+      <label for="category">Category <span class="required">*</span></label>
+      <select id="category" name="category" class="form-control" required>
+        <option value="">— Select a category —</option>
+        {% for cat in categories %}
+          <option value="{{ cat }}" {{ 'selected' if form_data.get('category') == cat }}>{{ cat }}</option>
+        {% endfor %}
+      </select>
+      {% if errors.category %}<span class="error-msg">{{ errors.category }}</span>{% endif %}
+    </div>
+
+    <!-- Location -->
+    <div class="form-group {{ 'has-error' if errors.location }}">
+      <label for="location">{{ location_label }} <span class="required">*</span></label>
+      <input type="text" id="location" name="location"
+             value="{{ form_data.get('location', '') }}"
+             placeholder="e.g. Library, Block A Lecture Hall, Canteen"
+             maxlength="200" class="form-control"
+             list="location-suggestions" required />
+      <datalist id="location-suggestions">
+        {% for loc in locations %}
+          <option value="{{ loc }}">
+        {% endfor %}
+      </datalist>
+      {% if errors.location %}<span class="error-msg">{{ errors.location }}</span>{% endif %}
+    </div>
+
+    <!-- Date -->
+    <div class="form-group {{ 'has-error' if errors.date_occurred }}">
+      <label for="date_occurred">{{ date_label }} <span class="required">*</span></label>
+      <input type="date" id="date_occurred" name="date_occurred"
+             value="{{ form_data.get('date_occurred', today) }}"
+             max="{{ today }}" class="form-control" required />
+      {% if errors.date_occurred %}<span class="error-msg">{{ errors.date_occurred }}</span>{% endif %}
+    </div>
+
+    <!-- Description -->
+    <div class="form-group {{ 'has-error' if errors.description }}">
+      <label for="description">Description</label>
+      <textarea id="description" name="description"
+                rows="3" maxlength="1000" class="form-control"
+                placeholder="Colour, brand, distinguishing features…">{{ form_data.get('description', '') }}</textarea>
+      {% if errors.description %}<span class="error-msg">{{ errors.description }}</span>{% endif %}
+    </div>
+
+    <!-- Reporter name -->
+    <div class="form-group {{ 'has-error' if errors.reporter_name }}">
+      <label for="reporter_name">Your Name <span class="required">*</span></label>
+      <input type="text" id="reporter_name" name="reporter_name"
+             value="{{ form_data.get('reporter_name', '') }}"
+             maxlength="100" class="form-control" required />
+      {% if errors.reporter_name %}<span class="error-msg">{{ errors.reporter_name }}</span>{% endif %}
+    </div>
+
+    <!-- Contact info -->
+    <div class="form-group {{ 'has-error' if errors.contact_info }}">
+      <label for="contact_info">Contact Information <span class="required">*</span></label>
+      <input type="text" id="contact_info" name="contact_info"
+             value="{{ form_data.get('contact_info', '') }}"
+             placeholder="Email address or phone number"
+             maxlength="150" class="form-control" required />
+      <small class="field-hint">{{ contact_hint }}</small>
+      {% if errors.contact_info %}<span class="error-msg">{{ errors.contact_info }}</span>{% endif %}
+    </div>
+

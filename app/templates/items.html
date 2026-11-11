@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Browse Reports — Campus Lost and Found{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h2>
+    {% if filters.type == 'lost' %}Lost Items
+    {% elif filters.type == 'found' %}Found Items
+    {% else %}All Reports{% endif %}
+    <span class="count-badge">{{ items | length }} item{{ 's' if items | length != 1 }}</span>
+  </h2>
+
+  <!-- ── Filter / search bar ─────────────────────────────────── -->
+  <form method="get" action="{{ url_for('main.browse') }}" class="filter-form" id="filterForm">
+    <div class="filter-row">
+      <input type="text"
+             name="q"
+             id="searchInput"
+             placeholder="Search by name, description or location…"
+             value="{{ filters.q }}"
+             class="form-control" />
+
+      <select name="type" class="form-control">
+        <option value="">All Types</option>
+        <option value="lost"  {{ 'selected' if filters.type == 'lost' }}>Lost</option>
+        <option value="found" {{ 'selected' if filters.type == 'found' }}>Found</option>
+      </select>
+
+      <select name="category" class="form-control">
+        <option value="">All Categories</option>
+        {% for cat in categories %}
+          <option value="{{ cat }}" {{ 'selected' if filters.category == cat }}>{{ cat }}</option>
+        {% endfor %}
+      </select>
+
+      <select name="status" class="form-control">
+        <option value="">All Statuses</option>
+        <option value="open"    {{ 'selected' if filters.status == 'open' }}>Open</option>
+        <option value="claimed" {{ 'selected' if filters.status == 'claimed' }}>Claimed</option>
+        <option value="closed"  {{ 'selected' if filters.status == 'closed' }}>Closed</option>
+      </select>
+    </div>
+
+    <div class="filter-row filter-row-dates">
+      <label>From:
+        <input type="date" name="date_from" value="{{ filters.date_from }}" class="form-control" />
+      </label>
+      <label>To:
+        <input type="date" name="date_to"   value="{{ filters.date_to }}"   class="form-control" />
+      </label>
+      <button type="submit" class="btn btn-primary">Search</button>
+      <a href="{{ url_for('main.browse') }}" class="btn btn-outline">Clear</a>
+    </div>
+  </form>
+</section>
+
+<!-- ── Results ─────────────────────────────────────────────────── -->
+{% if items %}
+  <div class="items-grid" id="itemsGrid">
+    {% for item in items %}
+      <a href="{{ url_for('main.item_detail', item_id=item.id) }}" class="item-card">
+        <div class="item-card-top">
+          <span class="badge badge-{{ item.type }}">{{ item.type_label }}</span>
+          <span class="badge badge-status-{{ item.status }}">{{ item.status_label }}</span>
+        </div>
+        <h3 class="item-title">{{ item.title }}</h3>
+        {% if item.description %}
+          <p class="item-desc">{{ item.description | truncate(80) }}</p>
+        {% endif %}
+        <p class="item-meta">📂 {{ item.category }}</p>
+        <p class="item-meta">📍 {{ item.location }}</p>
+        <p class="item-meta">📅 {{ item.date_occurred }}</p>
+        <p class="item-meta">👤 {{ item.reporter_name }}</p>
+      </a>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card empty-state">
+    <p>No reports match your search.</p>
+    <a href="{{ url_for('main.browse') }}" class="btn btn-outline">Clear filters</a>
+  </div>
+{% endif %}
+
+{% endblock %}
+

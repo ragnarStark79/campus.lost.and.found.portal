@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Report Lost Item — Campus Lost and Found{% endblock %}
+
+{% block content %}
+
+<div class="card form-card">
+  <h2>🔴 Report a Lost Item</h2>
+  <p class="form-intro">Fill in as much detail as possible. The more you share, the easier it is for someone to identify and return your item.</p>
+
+  <form method="post" action="{{ url_for('main.report_lost') }}" novalidate>
+    {% set location_label = "Where Was It Lost?" %}
+    {% set date_label = "Date Lost" %}
+    {% set contact_hint = "This will be shown publicly so finders can contact you." %}
+    {% include "_report_form_fields.html" %}
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-danger">Submit Lost Report</button>
+      <a href="{{ url_for('main.index') }}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

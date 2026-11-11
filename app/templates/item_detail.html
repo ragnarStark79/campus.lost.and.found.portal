@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}{{ item.title }} — Campus Lost and Found{% endblock %}
+
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="{{ url_for('main.index') }}">Home</a> &rsaquo;
+  <a href="{{ url_for('main.browse') }}?type={{ item.type }}">{{ item.type_label }} Items</a> &rsaquo;
+  {{ item.title }}
+</div>
+
+<div class="card detail-card">
+
+  <!-- ── Header ───────────────────────────────────────────────── -->
+  <div class="detail-header">
+    <div>
+      <span class="badge badge-{{ item.type }} badge-lg">{{ item.type_label }}</span>
+      <span class="badge badge-status-{{ item.status }} badge-lg">{{ item.status_label }}</span>
+    </div>
+    <h1 class="detail-title">{{ item.title }}</h1>
+  </div>
+
+  <!-- ── Detail table ─────────────────────────────────────────── -->
+  <table class="detail-table">
+    <tr>
+      <th>Category</th>
+      <td>{{ item.category }}</td>
+    </tr>
+    <tr>
+      <th>Location</th>
+      <td>{{ item.location }}</td>
+    </tr>
+    <tr>
+      <th>Date {{ 'Lost' if item.type == 'lost' else 'Found' }}</th>
+      <td>{{ item.date_occurred }}</td>
+    </tr>
+    <tr>
+      <th>Reported By</th>
+      <td>{{ item.reporter_name }}</td>
+    </tr>
+    <tr>
+      <th>Contact</th>
+      <td>{{ item.contact_info }}</td>
+    </tr>
+    <tr>
+      <th>Report Date</th>
+      <td>{{ item.created_at[:10] }}</td>
+    </tr>
+  </table>
+
+  {% if item.description %}
+  <div class="detail-description">
+    <h3>Description</h3>
+    <p>{{ item.description }}</p>
+  </div>
+  {% endif %}
+
+  <!-- ── Actions ──────────────────────────────────────────────── -->
+  <div class="detail-actions">
+    {% if item.type == 'found' and item.status == 'open' %}
+      <form method="post" action="{{ url_for('main.claim_item', item_id=item.id) }}"
+            onsubmit="return confirm('Mark this item as claimed? The reporter will be notified by the contact info listed above.');">
+        <button type="submit" class="btn btn-success">✅ This is Mine — Claim It</button>
+      </form>
+    {% elif item.type == 'lost' and item.status == 'open' %}
+      <a href="{{ url_for('main.report_found') }}" class="btn btn-primary">I Found This Item</a>
+    {% endif %}
+    <a href="{{ url_for('main.browse') }}" class="btn btn-outline">← Back to All Items</a>
+  </div>
+
+</div>
+
+{% endblock %}
+

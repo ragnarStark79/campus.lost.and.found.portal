@@ -1,45 +1,65 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Campus Lost and Found Portal</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
-</head>
-<body>
-  <header>
-    <h1>🎒 Campus Lost and Found Portal</h1>
-    <p>Helping students and staff reunite with their belongings.</p>
-  </header>
+{% extends "base.html" %}
 
-  <main>
-    <section>
-      <h2>Welcome</h2>
-      <p>
-        This portal is currently under construction.
-        Full features will be available after Phase 1 implementation.
-      </p>
-      <ul>
-        <li>Report a lost item</li>
-        <li>Browse found items</li>
-        <li>Claim your belongings</li>
-      </ul>
-    </section>
+{% block title %}Campus Lost and Found Portal{% endblock %}
 
-    <section>
-      <h2>System Status</h2>
-      <p>
-        Check the
-        <a href="/health">/health</a>
-        endpoint to verify that the service is running.
-      </p>
-    </section>
-  </main>
+{% block content %}
 
-  <footer>
-    <p>INT333 — DevOps Advance Configuration Management | Phase 0</p>
-  </footer>
+<!-- ── Hero ─────────────────────────────────────────────────────── -->
+<div class="hero">
+  <h1>🎒 Campus Lost and Found Portal</h1>
+  <p>Helping students and staff reunite with their belongings.</p>
+  <div class="hero-actions">
+    <a href="{{ url_for('main.report_lost') }}"  class="btn btn-danger">Report Lost Item</a>
+    <a href="{{ url_for('main.report_found') }}" class="btn btn-success">Report Found Item</a>
+    <a href="{{ url_for('main.browse') }}"        class="btn btn-outline">Browse All Items</a>
+  </div>
+</div>
 
-  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-</body>
-</html>
+<!-- ── Stats dashboard ──────────────────────────────────────────── -->
+<div class="stats-grid">
+  <div class="stat-card stat-total">
+    <div class="stat-number">{{ stats.total }}</div>
+    <div class="stat-label">Total Reports</div>
+  </div>
+  <div class="stat-card stat-lost">
+    <div class="stat-number">{{ stats.lost }}</div>
+    <div class="stat-label">Lost Items</div>
+  </div>
+  <div class="stat-card stat-found">
+    <div class="stat-number">{{ stats.found }}</div>
+    <div class="stat-label">Found Items</div>
+  </div>
+  <div class="stat-card stat-claimed">
+    <div class="stat-number">{{ stats.claimed }}</div>
+    <div class="stat-label">Reunited 🎉</div>
+  </div>
+</div>
+
+<!-- ── Recent reports ───────────────────────────────────────────── -->
+<section class="card">
+  <div class="section-header">
+    <h2>Recent Reports</h2>
+    <a href="{{ url_for('main.browse') }}" class="btn btn-sm btn-outline">View All</a>
+  </div>
+
+  {% if recent_items %}
+    <div class="items-grid">
+      {% for item in recent_items %}
+        <a href="{{ url_for('main.item_detail', item_id=item.id) }}" class="item-card">
+          <div class="item-card-top">
+            <span class="badge badge-{{ item.type }}">{{ item.type_label }}</span>
+            <span class="badge badge-status-{{ item.status }}">{{ item.status_label }}</span>
+          </div>
+          <h3 class="item-title">{{ item.title }}</h3>
+          <p class="item-meta">📂 {{ item.category }}</p>
+          <p class="item-meta">📍 {{ item.location }}</p>
+          <p class="item-meta">📅 {{ item.date_occurred }}</p>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="empty-state">No reports yet. Be the first to submit one!</p>
+  {% endif %}
+</section>
+
+{% endblock %}

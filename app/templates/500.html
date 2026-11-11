@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Server Error — Campus Lost and Found{% endblock %}
+{% block content %}
+<div class="card" style="text-align:center;padding:3rem;">
+  <div style="font-size:4rem;">⚠️</div>
+  <h1 style="margin:1rem 0 0.5rem;">500 — Internal Server Error</h1>
+  <p>Something went wrong on our end. Please try again shortly.</p>
+  <a href="{{ url_for('main.index') }}" class="btn btn-primary" style="margin-top:1.5rem;">Go to Homepage</a>
+</div>
+{% endblock %}
+
