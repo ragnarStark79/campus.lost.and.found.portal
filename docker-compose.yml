@@ -1,24 +1,31 @@
 # ── docker-compose.yml ────────────────────────────────────────────────────────
 # Local development only.
-# Phase 0: configuration is defined but NOT started yet.
+# Host port 5001 → container port 5000.
+# macOS reserves port 5000 for the AirPlay Receiver; the container itself
+# still runs Flask on its internal port 5000, matching the Dockerfile EXPOSE.
 
 services:
   web:
     build:
       context: .
       dockerfile: Dockerfile
-      target: runtime           # use the runtime stage
+      target: runtime # use the runtime stage
     image: campus-lostandfound:dev
     container_name: lostandfound_web
     restart: unless-stopped
 
     ports:
-      - "5000:5000"
+      - "5001:5000" # host:container — access via http://localhost:5001
 
     environment:
       FLASK_ENV: development
       FLASK_DEBUG: "true"
       SECRET_KEY: dev-secret-change-me
+      # Explicitly set host/port so the container is not affected by the
+      # local run.py defaults (127.0.0.1:5001). Flask must bind to all
+      # interfaces inside the container so Docker can route traffic in.
+      FLASK_HOST: "0.0.0.0"
+      FLASK_PORT: "5000"
 
     volumes:
       # Hot-reload source changes without rebuilding
@@ -27,11 +34,12 @@ services:
       - ./data:/app/data
 
     env_file:
-      - .env                    # optional — only if .env exists
+      - path: .env # only loaded when the file exists
+        required: false
 
     healthcheck:
-      test: ["CMD", "python", "-c",
-             "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      # Runs INSIDE the container, so it uses the internal port 5000.
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')" ]
       interval: 30s
       timeout: 5s
       retries: 3
