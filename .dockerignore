@@ -1,0 +1,47 @@
+# ── .dockerignore ─────────────────────────────────────────────────────────────
+# Files excluded from the Docker build context.
+
+# Python artefacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+*.egg-info/
+dist/
+build/
+
+# Virtual environment (dependencies installed inside image)
+.venv/
+venv/
+
+# Secrets and local config
+.env
+.env.*
+
+# Git history
+.git/
+.gitignore
+
+# Tests (not needed in production image)
+tests/
+
+# Documentation
+docs/
+README.md
+
+# Terraform / Puppet / Nagios (infrastructure — not part of app image)
+terraform/
+puppet/
+nagios/
+
+# CI/CD
+.github/
+
+# Docker development files
+docker-compose*.yml
+docker/
+
+# SQLite — mounted as a volume at runtime
+data/
+*.db
+*.sqlite

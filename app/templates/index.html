@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Campus Lost and Found Portal</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
+</head>
+<body>
+  <header>
+    <h1>🎒 Campus Lost and Found Portal</h1>
+    <p>Helping students and staff reunite with their belongings.</p>
+  </header>
+
+  <main>
+    <section>
+      <h2>Welcome</h2>
+      <p>
+        This portal is currently under construction.
+        Full features will be available after Phase 1 implementation.
+      </p>
+      <ul>
+        <li>Report a lost item</li>
+        <li>Browse found items</li>
+        <li>Claim your belongings</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>System Status</h2>
+      <p>
+        Check the
+        <a href="/health">/health</a>
+        endpoint to verify that the service is running.
+      </p>
+    </section>
+  </main>
+
+  <footer>
+    <p>INT333 — DevOps Advance Configuration Management | Phase 0</p>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

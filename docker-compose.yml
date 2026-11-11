@@ -1,0 +1,42 @@
+# ── docker-compose.yml ────────────────────────────────────────────────────────
+# Local development only.
+# Phase 0: configuration is defined but NOT started yet.
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime           # use the runtime stage
+    image: campus-lostandfound:dev
+    container_name: lostandfound_web
+    restart: unless-stopped
+
+    ports:
+      - "5000:5000"
+
+    environment:
+      FLASK_ENV: development
+      FLASK_DEBUG: "true"
+      SECRET_KEY: dev-secret-change-me
+
+    volumes:
+      # Hot-reload source changes without rebuilding
+      - ./app:/app/app:ro
+      # Persist SQLite database outside the container
+      - ./data:/app/data
+
+    env_file:
+      - .env                    # optional — only if .env exists
+
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  default:
+    name: lostandfound_net
