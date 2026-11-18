@@ -223,12 +223,20 @@ jobs:
         run: |
           echo "Executing durable application deployment..."
           echo "Target image reference: $TARGET_IMAGE"
+          COMMIT_SHA="${GITHUB_SHA::7}"
+          COMMIT_MSG="$(git log -1 --format=%s)"
+          DEPLOY_TIME="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          RUN_ID="${GITHUB_RUN_ID}"
           bash puppet/scripts/orchestrate-phase4.sh --ssh-deploy-app \
             "$MASTER_IP" \
             "$AGENT_IP" \
             "$TARGET_IMAGE" \
             "$KEY_FILE" \
-            "$KNOWN_HOSTS_FILE"
+            "$KNOWN_HOSTS_FILE" \
+            "$COMMIT_SHA" \
+            "$COMMIT_MSG" \
+            "$DEPLOY_TIME" \
+            "$RUN_ID"
 
       - name: Cleanup Ephemeral SSH Credentials
         if: always()

@@ -21,6 +21,12 @@ def create_app(config_class=Config):
     from .routes import main as main_blueprint
     app.register_blueprint(main_blueprint)
 
+    # ── Template context processors ───────────────────────────────────────────
+    @app.context_processor
+    def inject_deployment():
+        from .deployment import load_deployment_metadata
+        return {"latest_deployment": load_deployment_metadata()}
+
     # Initialise the database schema inside an app context.
     # This is safe to call on every startup — the schema uses CREATE TABLE IF
     # NOT EXISTS so existing data is never lost.

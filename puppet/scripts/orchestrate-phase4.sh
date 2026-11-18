@@ -37,7 +37,7 @@ Usage:
   $0 --ssh-agent-setup <AGENT_PUBLIC_IP> [KEY_PATH] [KNOWN_HOSTS_PATH]
   $0 --ssh-sign <MASTER_PUBLIC_IP> [KEY_PATH] [KNOWN_HOSTS_PATH]
   $0 --ssh-verify <AGENT_PUBLIC_IP> [KEY_PATH] [KNOWN_HOSTS_PATH]
-  $0 --ssh-deploy-app <MASTER_PUBLIC_IP> <AGENT_PUBLIC_IP> <IMAGE_TAG> [KEY_PATH] [KNOWN_HOSTS_PATH]
+  $0 --ssh-deploy-app <MASTER_PUBLIC_IP> <AGENT_PUBLIC_IP> <IMAGE_TAG> [KEY_PATH] [KNOWN_HOSTS_PATH] [COMMIT_SHA] [COMMIT_MSG] [DEPLOY_TIME] [RUN_ID]
 EOF
   exit 1
 }
@@ -47,6 +47,9 @@ if [ -z "$MODE" ]; then
 fi
 
 verify_ssh_prerequisites() {
+  if [ "${SKIP_SSH_PREFLIGHT:-0}" = "1" ]; then
+    return 0
+  fi
   local target_ip="$1"
   local key_path="$2"
   local hosts_path="$3"
@@ -103,6 +106,10 @@ verify_ssh_prerequisites() {
 }
 
 build_ssh_cmd() {
+  if [ -n "${MOCK_SSH_CMD:-}" ]; then
+    echo "$MOCK_SSH_CMD"
+    return 0
+  fi
   local key_path="$1"
   local hosts_path="$2"
   echo "ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$hosts_path -i $key_path"
@@ -251,16 +258,30 @@ EOF
     IMAGE_TAG="${4:?Image tag or reference required}"
     KEY_PATH="${5:-$DEFAULT_KEY}"
     KNOWN_HOSTS_PATH="${6:-$DEFAULT_KNOWN_HOSTS}"
+    COMMIT_SHA="${7:-}"
+    COMMIT_MSG="${8:-}"
+    DEPLOY_TIME="${9:-$(date -u '+%Y-%m-%dT%H:%M:%SZ')}"
+    RUN_ID="${10:-production}"
 
     verify_ssh_prerequisites "$MASTER_IP" "$KEY_PATH" "$KNOWN_HOSTS_PATH" "Puppet Master"
     verify_ssh_prerequisites "$AGENT_IP" "$KEY_PATH" "$KNOWN_HOSTS_PATH" "Puppet Agent"
 
     SSH_CMD=$(build_ssh_cmd "$KEY_PATH" "$KNOWN_HOSTS_PATH")
 
-    echo "=== [Deploy 1/3] Updating Durable Image in Master Hiera ($IMAGE_TAG) ==="
-    $SSH_CMD "ubuntu@$MASTER_IP" "sudo bash /etc/puppetlabs/code/environments/production/scripts/update-app-version.sh '$IMAGE_TAG' || sudo bash /tmp/puppet/scripts/update-app-version.sh '$IMAGE_TAG'"
+    # Record previous known-good image before making any changes for automated rollback
+    echo "=== [Deploy Preflight] Querying active application image for rollback baseline ==="
+    PREV_IMAGE=$($SSH_CMD "ubuntu@$MASTER_IP" "grep -E '^lostandfound::image:' /etc/puppetlabs/code/environments/production/data/common.yaml 2>/dev/null | head -1 | awk -F\"'\" '{print \$2}'" || echo "")
+    if [ -z "$PREV_IMAGE" ]; then
+      PREV_IMAGE=$($SSH_CMD "ubuntu@$AGENT_IP" "python3 -c \"import json; print(json.load(open('/opt/lostandfound/data/deployment.json')).get('deployment_image_tag', ''))\" 2>/dev/null" || echo "")
+    fi
+    echo "Active baseline image: ${PREV_IMAGE:-unknown}"
 
-    echo "=== [Deploy 2/3] Triggering Catalog Application on Agent ($AGENT_IP) ==="
+    echo "=== [Deploy 1/4] Updating Durable Image & Metadata in Master Hiera ($IMAGE_TAG) ==="
+    COMMIT_B64=$(printf '%s' "$COMMIT_MSG" | base64 | tr -d '\r\n')
+    $SSH_CMD "ubuntu@$MASTER_IP" "sudo bash /etc/puppetlabs/code/environments/production/scripts/update-app-version.sh '$IMAGE_TAG' '$COMMIT_SHA' '$COMMIT_B64' '$DEPLOY_TIME' '$RUN_ID' || sudo bash /tmp/puppet/scripts/update-app-version.sh '$IMAGE_TAG' '$COMMIT_SHA' '$COMMIT_B64' '$DEPLOY_TIME' '$RUN_ID'"
+
+    DEPLOY_FAILED=0
+    echo "=== [Deploy 2/4] Triggering Catalog Application on Agent ($AGENT_IP) ==="
     $SSH_CMD "ubuntu@$AGENT_IP" "sudo /opt/puppetlabs/bin/puppet agent -t --detailed-exitcodes" || {
       CODE=$?
       if [ "$CODE" -eq 2 ]; then
@@ -269,12 +290,53 @@ EOF
         echo "Catalog in sync with zero changes (exit code 0)."
       else
         echo "ERROR: Puppet agent run failed with exit code $CODE." >&2
-        exit 1
+        DEPLOY_FAILED=1
       fi
     }
 
-    echo "=== [Deploy 3/3] Verifying Application Health on Agent ==="
-    $SSH_CMD "ubuntu@$AGENT_IP" "for i in \$(seq 1 15); do if curl -sf http://127.0.0.1:5001/health; then echo ''; exit 0; fi; sleep 2; done; echo 'Health check timed out'; exit 1"
+    if [ "$DEPLOY_FAILED" -eq 0 ]; then
+      echo "=== [Deploy 3/4] Verifying Application Health on Agent (Port 5001) ==="
+      if ! $SSH_CMD "ubuntu@$AGENT_IP" "for i in \$(seq 1 15); do if curl -sf http://127.0.0.1:5001/health; then echo ''; exit 0; fi; sleep 2; done; echo 'Health check timed out'; exit 1"; then
+        echo "ERROR: Health check verification failed on Agent port 5001." >&2
+        DEPLOY_FAILED=1
+      fi
+    fi
+
+    # Automated Rollback if deployment or health check verification failed
+    if [ "$DEPLOY_FAILED" -ne 0 ]; then
+      echo "========================================================================" >&2
+      echo "CRITICAL: Deployment of $IMAGE_TAG failed verification!" >&2
+      echo "Initiating automated rollback to previous known-good version ($PREV_IMAGE)..." >&2
+      echo "========================================================================" >&2
+
+      # 1. Discard unverified pending metadata on Agent so it cannot be promoted
+      $SSH_CMD "ubuntu@$AGENT_IP" "sudo rm -f /opt/lostandfound/data/deployment_pending.json" || true
+
+      # 2. Restore Master Hiera and re-apply catalog on Agent if previous image is known
+      if [ -n "$PREV_IMAGE" ] && [ "$PREV_IMAGE" != "$IMAGE_TAG" ]; then
+        echo "[Rollback 1/3] Restoring Master Hiera to known-good image ($PREV_IMAGE)..." >&2
+        ROLLBACK_MSG_B64=$(printf '%s' "rollback: restore image to $PREV_IMAGE" | base64 | tr -d '\r\n')
+        $SSH_CMD "ubuntu@$MASTER_IP" "sudo bash /etc/puppetlabs/code/environments/production/scripts/update-app-version.sh '$PREV_IMAGE' '' '$ROLLBACK_MSG_B64' || sudo bash /tmp/puppet/scripts/update-app-version.sh '$PREV_IMAGE' '' '$ROLLBACK_MSG_B64'" || true
+
+        echo "[Rollback 2/3] Re-applying Puppet catalog on Agent to restore container..." >&2
+        $SSH_CMD "ubuntu@$AGENT_IP" "sudo /opt/puppetlabs/bin/puppet agent -t --detailed-exitcodes" || true
+
+        echo "[Rollback 3/3] Verifying restored application health on Agent..." >&2
+        if $SSH_CMD "ubuntu@$AGENT_IP" "for i in \$(seq 1 15); do if curl -sf http://127.0.0.1:5001/health; then echo 'Restored application is healthy.'; exit 0; fi; sleep 2; done; exit 1"; then
+          echo "SUCCESS: Rollback complete. Application restored to known-good image ($PREV_IMAGE)." >&2
+        else
+          echo "CRITICAL WARNING: Restored application health check timed out. Manual investigation required on Agent ($AGENT_IP)." >&2
+        fi
+      else
+        echo "WARNING: No distinct previous image available to restore ($PREV_IMAGE)." >&2
+      fi
+
+      echo "ERROR: Deployment failed. Active deployment record preserved. Aborting with exit code 1." >&2
+      exit 1
+    fi
+
+    echo "=== [Deploy 4/4] Atomically Promoting Verified Deployment Metadata on Agent ==="
+    $SSH_CMD "ubuntu@$AGENT_IP" "if [ -f /opt/lostandfound/data/deployment_pending.json ]; then sudo cp /opt/lostandfound/data/deployment_pending.json /opt/lostandfound/data/deployment.json.tmp && sudo chmod 0644 /opt/lostandfound/data/deployment.json.tmp && sudo mv /opt/lostandfound/data/deployment.json.tmp /opt/lostandfound/data/deployment.json && echo 'Verified deployment metadata promoted successfully.'; fi"
 
     echo "=== [Deployment Complete] Application $IMAGE_TAG successfully deployed and healthy! ==="
     ;;

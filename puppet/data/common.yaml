@@ -27,3 +27,13 @@ lostandfound::data_dir: '/opt/lostandfound/data'
 
 # Container environment
 lostandfound::flask_env: 'production'
+
+# Deployment status and metadata (dynamically updated by CI/CD on Master)
+lostandfound::deployment_status: 'Successful'
+lostandfound::deployment_message: 'Successfully deployed through CI/CD pipeline. Puppet Agent pulled and applied the latest configuration from Puppet Master.'
+lostandfound::deployment_timestamp_utc: '2026-11-18T14:15:00Z'
+lostandfound::deployment_commit: '0bf459f'
+lostandfound::deployment_commit_message: 'feat(infra): complete Phase 1-5 AWS, Puppet 8, and CI/CD deployment pipeline'
+lostandfound::deployment_image_tag: 'sha-0bf459f'
+lostandfound::deployment_workflow_run: 'production'
+lostandfound::deployment_json: '{"deployment_status": "Successful", "deployment_message": "Successfully deployed through CI/CD pipeline. Puppet Agent pulled and applied the latest configuration from Puppet Master.", "deployment_pipeline": "GitHub Actions", "deployment_path": "GitHub Actions → GHCR → Puppet Master → Puppet Agent", "deployment_timestamp_utc": "2026-11-18T14:15:00Z", "deployment_commit": "0bf459f", "deployment_commit_message": "feat(infra): complete Phase 1-5 AWS, Puppet 8, and CI/CD deployment pipeline", "deployment_image_tag": "sha-0bf459f", "deployment_workflow_run": "production"}'

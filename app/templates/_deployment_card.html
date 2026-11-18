@@ -1,0 +1,49 @@
+<!-- ── Latest Deployment Status Card ─────────────────────────── -->
+<aside class="deployment-card" aria-label="Deployment Status">
+  <div class="deployment-card-header">
+    <div class="deployment-title-wrap">
+      <span class="deployment-rocket-icon" aria-hidden="true">🚀</span>
+      <h3 class="deployment-heading">Latest Deployment</h3>
+    </div>
+    {% if latest_deployment.is_confirmed %}
+      <span class="deployment-badge deployment-badge-success">
+        <span class="status-dot status-dot-success" aria-hidden="true"></span>
+        {{ latest_deployment.status }}
+      </span>
+    {% else %}
+      <span class="deployment-badge deployment-badge-pending">
+        <span class="status-dot status-dot-pending" aria-hidden="true"></span>
+        {{ latest_deployment.status }}
+      </span>
+    {% endif %}
+  </div>
+
+  <p class="deployment-message">{{ latest_deployment.message }}</p>
+
+  <div class="deployment-meta-grid">
+    <div class="deployment-meta-item">
+      <span class="meta-label">Pipeline:</span>
+      <span class="meta-value font-medium">{{ latest_deployment.pipeline }}</span>
+    </div>
+
+    <div class="deployment-meta-item">
+      <span class="meta-label">Deployment path:</span>
+      <span class="meta-value deployment-path-tag">{{ latest_deployment.deployment_path }}</span>
+    </div>
+
+    <div class="deployment-meta-item">
+      <span class="meta-label">Last deployed:</span>
+      <span class="meta-value" title="{{ latest_deployment.timestamp_utc }}">
+        📅 {{ latest_deployment.timestamp_ist }}
+      </span>
+    </div>
+
+    <div class="deployment-meta-item deployment-commit-item">
+      <span class="meta-label">Commit:</span>
+      <div class="meta-value commit-wrapper">
+        <code class="commit-badge">{{ latest_deployment.commit }}</code>
+        <span class="commit-subject" title="{{ latest_deployment.commit_message }}">{{ latest_deployment.commit_message }}</span>
+      </div>
+    </div>
+  </div>
+</aside>

@@ -1,0 +1,25 @@
+<%- |
+  String[1] $commit,
+  String[1] $commit_message,
+  String[1] $image_tag,
+  String[1] $message,
+  String[1] $status,
+  String[1] $timestamp_utc,
+  String[1] $workflow_run,
+  Optional[String[1]] $raw_json = undef,
+| -%>
+<%- if $raw_json { -%>
+<%= $raw_json %>
+<%- } else { -%>
+{
+  "deployment_status": "<%= $status %>",
+  "deployment_message": "<%= $message %>",
+  "deployment_pipeline": "GitHub Actions",
+  "deployment_path": "GitHub Actions → GHCR → Puppet Master → Puppet Agent",
+  "deployment_timestamp_utc": "<%= $timestamp_utc %>",
+  "deployment_commit": "<%= $commit %>",
+  "deployment_commit_message": "<%= $commit_message %>",
+  "deployment_image_tag": "<%= $image_tag %>",
+  "deployment_workflow_run": "<%= $workflow_run %>"
+}
+<%- } -%>

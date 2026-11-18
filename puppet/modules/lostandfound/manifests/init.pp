@@ -20,9 +20,17 @@ class lostandfound (
   String[1]            $data_dir         = '/opt/lostandfound/data',
   String[1]            $flask_env        = 'production',
   Optional[String[1]]  $secret_key       = $facts['lostandfound_secret_key'],
-  Boolean              $image_is_private = false,
-  Optional[String[1]]  $ghcr_username    = $facts['ghcr_username'],
-  Optional[String[1]]  $ghcr_token       = $facts['ghcr_token'],
+  Boolean              $image_is_private          = false,
+  Optional[String[1]]  $ghcr_username             = $facts['ghcr_username'],
+  Optional[String[1]]  $ghcr_token                = $facts['ghcr_token'],
+  String[1]            $deployment_status         = 'Successful',
+  String[1]            $deployment_message        = 'Successfully deployed through CI/CD pipeline. Puppet Agent pulled and applied the latest configuration from Puppet Master.',
+  String[1]            $deployment_timestamp_utc  = '2026-11-18T14:15:00Z',
+  String[1]            $deployment_commit         = '0bf459f',
+  String[1]            $deployment_commit_message = 'feat(infra): complete Phase 1-5 AWS, Puppet 8, and CI/CD deployment pipeline',
+  String[1]            $deployment_image_tag      = 'sha-0bf459f',
+  String[1]            $deployment_workflow_run   = 'production',
+  Optional[String[1]]  $deployment_json           = undef,
 ) {
   if $secret_key == undef or $secret_key == '' {
     fail('lostandfound: secret_key must be set via FACTER_lostandfound_secret_key, Hiera, or class parameter.')
@@ -125,6 +133,40 @@ class lostandfound (
     }),
     require   => File[$app_dir],
     notify    => Service['lostandfound'],
+  }
+
+  # ── 3b. Staged Deployment Metadata (Pending Post-Deploy Health Verification) ─
+  $deployment_content = $deployment_json ? {
+    undef   => epp('lostandfound/deployment.json.epp', {
+      'commit'         => $deployment_commit,
+      'commit_message' => $deployment_commit_message,
+      'image_tag'      => $deployment_image_tag,
+      'message'        => $deployment_message,
+      'status'         => $deployment_status,
+      'timestamp_utc'  => $deployment_timestamp_utc,
+      'workflow_run'   => $deployment_workflow_run,
+    }),
+    default => "${deployment_json}\n",
+  }
+
+  file { "${data_dir}/deployment_pending.json":
+    ensure  => file,
+    owner   => 'root',
+    group   => 'root',
+    mode    => '0644',
+    content => $deployment_content,
+    require => File[$data_dir],
+  }
+
+  # Initialize active deployment.json if missing; never overwrite during catalog run
+  file { "${data_dir}/deployment.json":
+    ensure  => file,
+    replace => false,
+    owner   => 'root',
+    group   => 'root',
+    mode    => '0644',
+    content => $deployment_content,
+    require => File[$data_dir],
   }
 
   # ── 4. Optional GHCR Authentication (Private Images Only) ──────────────────
