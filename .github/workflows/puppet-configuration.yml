@@ -1,0 +1,179 @@
+name: Phase 4 — Puppet 8 Master-Agent Configuration
+
+on:
+  workflow_dispatch:
+    inputs:
+      master_public_ip:
+        description: "Puppet Master Current Public IPv4 Address"
+        required: true
+        type: string
+      agent_public_ip:
+        description: "Puppet Agent Current Public IPv4 Address"
+        required: true
+        type: string
+      action:
+        description: "Puppet Orchestration Scope"
+        required: true
+        default: "full-orchestration"
+        type: choice
+        options:
+          - full-orchestration
+          - master-setup-only
+          - agent-setup-only
+          - sign-cert-only
+          - verify-catalog-only
+
+# Principle of least privilege: default read-only token
+permissions:
+  contents: read
+
+concurrency:
+  group: puppet-configuration-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preflight_validation:
+    name: Validate Manifests, Modules & Scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate shell scripts syntax
+        run: |
+          for script in puppet/scripts/*.sh; do
+            echo "Validating $script..."
+            bash -n "$script"
+          done
+
+      - name: Check Puppet manifest and Hiera hierarchy
+        run: |
+          test -f puppet/manifests/site.pp || { echo "Missing site.pp"; exit 1; }
+          test -f puppet/hiera.yaml || { echo "Missing hiera.yaml"; exit 1; }
+          test -f puppet/data/common.yaml || { echo "Missing common.yaml"; exit 1; }
+          test -d puppet/modules/baseline || { echo "Missing baseline module"; exit 1; }
+          test -d puppet/modules/lostandfound || { echo "Missing lostandfound module"; exit 1; }
+          echo "Puppet manifest, module, and Hiera configuration confirmed."
+
+  orchestrate_puppet:
+    name: Orchestrate via SSH (Mac Self-Hosted Runner)
+    needs: preflight_validation
+    if: github.actor == 'ragnarStark79' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, macOS, ARM64, puppet-deploy]
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify SSH Prerequisites and Host Key Enrollment
+        id: preflight
+        env:
+          MASTER_IP: ${{ inputs.master_public_ip }}
+          AGENT_IP: ${{ inputs.agent_public_ip }}
+          SSH_KEY_DATA: ${{ secrets.SSH_PRIVATE_KEY }}
+          KNOWN_HOSTS_DATA: ${{ secrets.KNOWN_HOSTS }}
+        run: |
+          if [ -z "$MASTER_IP" ]; then
+            echo "::error::Input master_public_ip is missing or empty." >&2
+            exit 1
+          fi
+          if [ -z "$AGENT_IP" ]; then
+            echo "::error::Input agent_public_ip is missing or empty." >&2
+            exit 1
+          fi
+          if [ -z "$SSH_KEY_DATA" ]; then
+            echo "::error::Required secret SSH_PRIVATE_KEY is missing or empty." >&2
+            exit 1
+          fi
+          if [ -z "$KNOWN_HOSTS_DATA" ]; then
+            echo "::error::Required secret KNOWN_HOSTS is missing or empty." >&2
+            exit 1
+          fi
+
+          # Create isolated temporary SSH directory under runner.temp with 0700 permissions
+          SSH_DIR="${RUNNER_TEMP}/ssh_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "$SSH_DIR"
+          chmod 0700 "$SSH_DIR"
+
+          # Write private key (0400) and verified known_hosts (0600)
+          KEY_FILE="${SSH_DIR}/deploy_key.pem"
+          printf "%s\n" "$SSH_KEY_DATA" > "$KEY_FILE"
+          chmod 0400 "$KEY_FILE"
+
+          KNOWN_HOSTS_FILE="${SSH_DIR}/known_hosts"
+          printf "%s\n" "$KNOWN_HOSTS_DATA" > "$KNOWN_HOSTS_FILE"
+          chmod 0600 "$KNOWN_HOSTS_FILE"
+
+          echo "ssh_dir=$SSH_DIR" >> "$GITHUB_OUTPUT"
+          echo "key_file=$KEY_FILE" >> "$GITHUB_OUTPUT"
+          echo "known_hosts_file=$KNOWN_HOSTS_FILE" >> "$GITHUB_OUTPUT"
+          echo "SSH credentials successfully written to isolated ephemeral directory."
+
+      - name: Execute Puppet Orchestration Sequence
+        env:
+          MASTER_IP: ${{ inputs.master_public_ip }}
+          AGENT_IP: ${{ inputs.agent_public_ip }}
+          ACTION: ${{ inputs.action }}
+          KEY_FILE: ${{ steps.preflight.outputs.key_file }}
+          KNOWN_HOSTS_FILE: ${{ steps.preflight.outputs.known_hosts_file }}
+          PUPPET_FORGE_API_KEY: ${{ secrets.PUPPET_FORGE_API_KEY }}
+        run: |
+          chmod +x puppet/scripts/*.sh
+
+          case "$ACTION" in
+            full-orchestration)
+              echo "Executing full Phase 4 orchestration sequence..."
+              bash puppet/scripts/orchestrate-phase4.sh --ssh \
+                "$MASTER_IP" \
+                "$AGENT_IP" \
+                "$KEY_FILE" \
+                "$KNOWN_HOSTS_FILE"
+              ;;
+
+            master-setup-only)
+              echo "Executing Master setup only..."
+              bash puppet/scripts/orchestrate-phase4.sh --ssh-master-setup \
+                "$MASTER_IP" \
+                "$KEY_FILE" \
+                "$KNOWN_HOSTS_FILE"
+              ;;
+
+            agent-setup-only)
+              echo "Executing Agent setup only..."
+              bash puppet/scripts/orchestrate-phase4.sh --ssh-agent-setup \
+                "$AGENT_IP" \
+                "$KEY_FILE" \
+                "$KNOWN_HOSTS_FILE"
+              ;;
+
+            sign-cert-only)
+              echo "Executing certificate signing only..."
+              bash puppet/scripts/orchestrate-phase4.sh --ssh-sign \
+                "$MASTER_IP" \
+                "$KEY_FILE" \
+                "$KNOWN_HOSTS_FILE"
+              ;;
+
+            verify-catalog-only)
+              echo "Executing catalog verification only..."
+              bash puppet/scripts/orchestrate-phase4.sh --ssh-verify \
+                "$AGENT_IP" \
+                "$KEY_FILE" \
+                "$KNOWN_HOSTS_FILE"
+              ;;
+
+            *)
+              echo "ERROR: Unknown action '$ACTION'" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Cleanup Ephemeral SSH Credentials
+        if: always()
+        run: |
+          SSH_DIR="${{ steps.preflight.outputs.ssh_dir }}"
+          if [ -n "$SSH_DIR" ] && [ -d "$SSH_DIR" ]; then
+            echo "Removing ephemeral SSH credentials directory: $SSH_DIR"
+            rm -rf "$SSH_DIR"
+            echo "Ephemeral SSH credentials removed."
+          fi

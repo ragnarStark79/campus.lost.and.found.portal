@@ -1,0 +1,35 @@
+# Terraform Variable Definitions Example
+# Copy this file to terraform.tfvars and customize with your admin IP and settings.
+# DO NOT commit terraform.tfvars with sensitive IP addresses or credentials to source control.
+
+# AWS Region (Default: ap-south-1 Mumbai)
+aws_region = "ap-south-1"
+
+# Base Project Name
+project_name = "campus-lost-and-found"
+
+# Environment
+environment = "dev"
+
+# Administrator IPv4 CIDR block for SSH (port 22) and Nagios web access (port 80).
+# MUST be a specific CIDR block (e.g. your public IP /32) and MUST NOT be 0.0.0.0/0.
+# Example: "203.0.113.50/32" (Replace with your actual public IP from https://checkip.amazonaws.com)
+admin_cidr = "203.0.113.50/32"
+
+# Existing EC2 Key Pair registered in AWS (DO NOT create new key pairs)
+key_name = "devpupAsia"
+
+# EC2 Instance Type (t3.small provides 2 vCPU and 2 GiB RAM for Puppet Server and Agent)
+instance_type = "t3.small"
+
+# Application Host Port
+app_port = 5001
+
+# Allowed CIDRs for application port 5001 (default allows all public users)
+allowed_http_cidrs = ["0.0.0.0/0"]
+
+# Encrypted GP3 Root Volume Size in GiB (Master: 16 GiB, Agent: 16 GiB = 32 GiB total)
+root_volume_size_gb = 16
+
+# SSM Parameter Store path for Puppet repository credentials
+ssm_parameter_name = "/devops/puppet/apt_key"

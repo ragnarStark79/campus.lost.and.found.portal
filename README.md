@@ -1,7 +1,7 @@
 # Campus Lost and Found Portal
 
 > **Course:** INT333 — DevOps Advance Configuration Management
-> **Phase:** 2 — CI/CD and Container Registry (GitHub Actions & GHCR)
+> **Status:** Revised Architecture Blueprint (7-Phase Multi-Tier Deployment)
 
 ---
 
@@ -35,15 +35,16 @@ and monitoring — all integrated through a CI/CD pipeline.
 |-------|-----------|
 | Backend | Python 3.13 · Flask |
 | Frontend | HTML · CSS · JavaScript |
-| Database | SQLite |
+| Database | SQLite (EBS-backed persistent storage) |
 | Version Control | Git · GitHub |
 | CI/CD | GitHub Actions |
 | Containerisation | Docker · Docker Compose |
 | Container Registry | GitHub Container Registry (GHCR) |
-| Cloud Platform | AWS EC2 |
-| Infrastructure as Code | Terraform |
-| Configuration Management | Puppet |
-| Monitoring | Nagios Core |
+| Cloud Platform | AWS EC2 (Custom VPC `10.30.0.0/16`, Dual Subnets) |
+| Infrastructure as Code | Terraform (Multi-tier: Master + Agent, IAM, SSM) |
+| Configuration Management | Puppet 8 Master-Agent (Port 8140, Dynamic Catalogs) |
+| Secret Management | AWS SSM Parameter Store (`SecureString`) & IAM Instance Profiles |
+| Monitoring | Nagios Core 4 & NRPE (Host, HTTP 5001, Metrics, Container) |
 
 ---
 
@@ -60,22 +61,31 @@ DevOps/
 │   ├── config.py          # Environment-based configuration
 │   ├── templates/         # Jinja2 HTML templates
 │   └── static/            # CSS, JS, images
-├── tests/                 # Pytest test suite (database & route tests)
+├── tests/                 # Pytest test suite (51 database & route tests)
 ├── docker/                # Additional Docker helper files
 ├── .github/
 │   └── workflows/
 │       └── ci-cd.yml      # GitHub Actions CI/CD & GHCR workflow
-├── terraform/             # Terraform IaC for AWS (Phase 3)
+├── docs/
+│   └── implementation/    # Authoritative Architecture & Planning Blueprints
+│       ├── REVISED_PROJECT_ARCHITECTURE.md  # Detailed 2-node architecture & network spec
+│       ├── REVISED_PHASE_ROADMAP.md         # 7-Phase implementation lifecycle & gates
+│       └── ARCHITECTURE_DECISIONS.md       # Architecture Decision Records (ADRs 001-009)
+├── terraform/             # Terraform IaC for AWS (Custom VPC, Master & Agent EC2, IAM)
 │   ├── modules/
 │   └── environments/
-├── puppet/                # Puppet configuration management (Phase 3)
+├── puppet/                # Puppet 8 Master-Agent manifests & modules
 │   ├── manifests/
+│   │   └── site.pp
 │   └── modules/
-├── nagios/                # Nagios monitoring configs (Phase 4)
+│       └── lostandfound/
+│           ├── files/sync-data-owner.sh
+│           ├── manifests/init.pp
+│           └── templates/
+├── nagios/                # Nagios Core monitoring configurations
 │   ├── configs/
 │   └── scripts/
 ├── scripts/               # Utility shell/Python scripts
-├── docs/                  # Architecture diagrams, screenshots, notes
 ├── pytest.ini             # Pytest discovery configuration
 ├── run.py                 # Application entry point
 ├── requirements.txt       # Production dependencies
@@ -85,7 +95,8 @@ DevOps/
 ├── .dockerignore
 ├── Dockerfile
 ├── docker-compose.yml
-└── README.md
+├── README.md
+└── LICENSE
 ```
 
 ---
@@ -184,10 +195,13 @@ Access the containerised application at:
 
 ## CI/CD & GitHub Container Registry (GHCR)
 
-> **Repository remote note:** `git remote -v` is currently empty in this local
-> workspace (no GitHub remote has been linked yet). Replace `<github-owner>` and
-> `<repo-name>` below with your verified GitHub repository owner and name once
-> you attach a remote (`git remote add origin git@github.com:<github-owner>/<repo-name>.git`).
+> **Repository & GHCR image:** Linked to `git@github.com:ragnarStark79/campus.lost.and.found.portal.git`.
+> Because GitHub Container Registry requires lowercase image names, `.github/workflows/ci-cd.yml`
+> normalizes the repository path to `ghcr.io/ragnarstark79/campus.lost.and.found.portal`.
+> **Publication Verified:** GitHub Actions workflow run `43176357332` executed successfully on `main`,
+> passing both CI checks (flake8, mypy, pytest) and the Docker smoke test, and publishing images with tags
+> `:latest` and `:sha-0bf459f` (digest `sha256:821071da8b48d23e9cde3063e628caf30288521cb6091befde6a548baa2bc160`).
+> *Note on package access:* By default, GHCR initializes packages as Private unless changed to Public in GitHub package settings. If kept private, pulling requires `docker login ghcr.io`.
 
 ### CI/CD Architecture
 
@@ -344,18 +358,51 @@ docker ps --filter name=lostandfound_web
 
 ---
 
-## Implementation Phases
+---
 
-| Phase | Title | Status |
-|-------|-------|--------|
-| **0** | Project Foundation and Environment Setup | ✅ Complete |
-| **1** | Core Application Features | ✅ Complete |
-| **2** | Docker · GitHub Actions · GHCR | ✅ Current |
-| **3** | Terraform · AWS EC2 · Puppet | ⏳ Pending |
-| **4** | Nagios Monitoring and Alerting | ⏳ Pending |
-| **5** | Final Integration, Testing and Documentation | ⏳ Pending |
+## Target Architecture & Implementation Blueprint
 
-> Development runs locally first; CI/CD publishes images to GHCR while AWS EC2 remains stopped until Phase 3 deployment and demonstrations.
+Following our comprehensive codebase audit and alignment with **INT333 Practical #4**, the project architecture transitions from a single-node prototype to an enterprise-grade **Two-Tier Master-Agent Architecture on AWS EC2**.
+
+Authoritative implementation specifications and design records are located in:
+- [Revised Project Architecture Specification](docs/implementation/REVISED_PROJECT_ARCHITECTURE.md)
+- [Revised Seven-Phase Implementation Roadmap](docs/implementation/REVISED_PHASE_ROADMAP.md)
+- [Architecture Decision Records (ADRs 001–009)](docs/implementation/ARCHITECTURE_DECISIONS.md)
+
+### Key Architectural Pillars
+
+1. **Two EC2 Instances on Ubuntu 24.04 LTS:**
+   - `puppet-master` (`10.30.1.10`, `t3.small`): Central configuration compiler (Puppet Server 8) and monitoring server (Nagios Core 4 + Apache CGI dashboard).
+   - `puppet-agent` (`10.30.2.10`, `t3.small`): Application host running Puppet 8 Agent, Docker Engine CE, the Campus Lost and Found portal (`lostandfound_web` on port 5001), and the NRPE daemon.
+2. **Dedicated Greenfield AWS VPC (`10.30.0.0/16`):**
+   - Subnet A (`10.30.1.0/24`) for Master; Subnet B (`10.30.2.0/24`) for Agent.
+   - Cross-referenced Security Groups: Puppet port 8140 and NRPE port 5666 remain isolated between peers.
+   - Public application port 5001 accessible to campus users; SSH (port 22) and Nagios Web (port 80) strictly locked to `admin_cidr`.
+3. **Encrypted Secret Isolation (Zero-Secret Principle):**
+   - Repository tokens and secrets stored as `SecureString` in **AWS SSM Parameter Store** (`/devops/puppet/apt_key`).
+   - Retrieved securely at boot time via **IAM Instance Profiles**; zero credentials exist in Git, Terraform state, or user-data logs.
+4. **Persistent EBS SQLite Storage:**
+   - 10 GB GP3 EBS volume mounted at `/opt/lostandfound/data` on the Agent node.
+   - Dynamic non-root `appuser` UID:GID alignment prevents SQLite readonly errors.
+5. **Observability & Failure Simulation:**
+   - Nagios Core 4 monitors ICMP PING, HTTP on port 5001 (`/health`), CPU load, persistent disk usage, and container health.
+   - Supports live self-healing demonstrations during viva defense.
+
+---
+
+## Revised Seven-Phase Implementation Roadmap
+
+| Phase | Title | Status | Scope Summary |
+|:---:|:---|:---:|:---|
+| **1** | Application Foundation and Containerization | ✅ **Complete** | Python 3.13 Flask, SQLite CRUD, 51/51 pytest passing, multi-stage Dockerfile, non-root user, docker-compose. |
+| **2** | CI Pipeline and Container Registry | ✅ **Complete** | `.github/workflows/ci-cd.yml` executed successfully; CI and Docker/GHCR jobs passed; published tags `:latest` and `:sha-0bf459f`. |
+| **3** | AWS Infrastructure with Terraform | ⏳ **Current (In Progress)** | Custom VPC (`10.30.0.0/16`), dual subnets, IAM role, SSM Parameter Store, 2 EC2 instances, EBS volume, SGs. |
+| **4** | Puppet 8 Master-Agent Configuration | 📋 **Planned** | Puppet Server 8 on Master, Puppet Agent on Agent, SSM APT token retrieval, SSL CA signing, dynamic catalogs. |
+| **5** | Automated Application Deployment via Puppet | 📋 **Planned** | Docker Engine CE, GHCR container pull, systemd unit `lostandfound.service` (5001:5000), persistent volume permissions. |
+| **6** | Nagios Core and NRPE Monitoring | 📋 **Planned** | Nagios 4 on Master, Apache CGI web dashboard, host definition, 5 service checks (PING, HTTP, NRPE load, disk, container). |
+| **7** | End-to-End Validation, Security & Viva Demo | 📋 **Planned** | Full automated pipeline test, container failure simulation & self-healing, security verification, `terraform destroy`. |
+
+> **Development Policy:** Development and testing run locally first. Terraform and Puppet code are authoritatively planned and validated before any AWS cloud resources are provisioned. User approval is strictly required before executing `terraform apply`.
 
 ---
 

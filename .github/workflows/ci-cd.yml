@@ -61,6 +61,10 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      image_name: ${{ steps.image.outputs.name }}
+      image_tag: ${{ steps.version.outputs.tag }}
+      image_ref: ${{ steps.image.outputs.name }}:${{ steps.version.outputs.tag }}
 
     steps:
       - name: Checkout repository
@@ -71,6 +75,12 @@ jobs:
         run: |
           IMAGE_NAME="ghcr.io/$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
           echo "name=${IMAGE_NAME}" >> "${GITHUB_OUTPUT}"
+
+      - name: Compute immutable commit image tag
+        id: version
+        run: |
+          TAG="sha-${GITHUB_SHA::7}"
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -145,3 +155,87 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  deploy_app:
+    name: Deploy Application via Puppet (Mac Self-Hosted Runner)
+    needs: docker
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor == 'ragnarStark79'
+    runs-on: [self-hosted, macOS, ARM64, puppet-deploy]
+    environment: production
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify SSH Prerequisites and EC2 Reachability
+        id: preflight
+        env:
+          MASTER_IP: ${{ secrets.MASTER_PUBLIC_IP }}
+          AGENT_IP: ${{ secrets.AGENT_PUBLIC_IP }}
+          KNOWN_HOSTS_DATA: ${{ secrets.KNOWN_HOSTS }}
+          SSH_KEY_DATA: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          if [ -z "$MASTER_IP" ]; then
+            echo "::error::Required secret MASTER_PUBLIC_IP is missing or empty." >&2
+            exit 1
+          fi
+          if [ -z "$AGENT_IP" ]; then
+            echo "::error::Required secret AGENT_PUBLIC_IP is missing or empty." >&2
+            exit 1
+          fi
+          if [ -z "$SSH_KEY_DATA" ]; then
+            echo "::error::Required secret SSH_PRIVATE_KEY is missing or empty." >&2
+            exit 1
+          fi
+          if [ -z "$KNOWN_HOSTS_DATA" ]; then
+            echo "::error::Required secret KNOWN_HOSTS is missing or empty." >&2
+            exit 1
+          fi
+
+          # Create isolated temporary SSH directory under runner.temp with 0700 permissions
+          SSH_DIR="${RUNNER_TEMP}/ssh_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "$SSH_DIR"
+          chmod 0700 "$SSH_DIR"
+
+          # Write private key (0400) and verified known_hosts (0600)
+          KEY_FILE="${SSH_DIR}/deploy_key.pem"
+          printf "%s\n" "$SSH_KEY_DATA" > "$KEY_FILE"
+          chmod 0400 "$KEY_FILE"
+
+          KNOWN_HOSTS_FILE="${SSH_DIR}/known_hosts"
+          printf "%s\n" "$KNOWN_HOSTS_DATA" > "$KNOWN_HOSTS_FILE"
+          chmod 0600 "$KNOWN_HOSTS_FILE"
+
+          echo "ssh_dir=$SSH_DIR" >> "$GITHUB_OUTPUT"
+          echo "key_file=$KEY_FILE" >> "$GITHUB_OUTPUT"
+          echo "known_hosts_file=$KNOWN_HOSTS_FILE" >> "$GITHUB_OUTPUT"
+          echo "SSH credentials successfully written to isolated ephemeral directory."
+
+      - name: Deploy Durable Version to Master and Apply Catalog on Agent
+        env:
+          MASTER_IP: ${{ secrets.MASTER_PUBLIC_IP }}
+          AGENT_IP: ${{ secrets.AGENT_PUBLIC_IP }}
+          KEY_FILE: ${{ steps.preflight.outputs.key_file }}
+          KNOWN_HOSTS_FILE: ${{ steps.preflight.outputs.known_hosts_file }}
+          TARGET_IMAGE: ${{ needs.docker.outputs.image_ref }}
+        run: |
+          echo "Executing durable application deployment..."
+          echo "Target image reference: $TARGET_IMAGE"
+          bash puppet/scripts/orchestrate-phase4.sh --ssh-deploy-app \
+            "$MASTER_IP" \
+            "$AGENT_IP" \
+            "$TARGET_IMAGE" \
+            "$KEY_FILE" \
+            "$KNOWN_HOSTS_FILE"
+
+      - name: Cleanup Ephemeral SSH Credentials
+        if: always()
+        run: |
+          SSH_DIR="${{ steps.preflight.outputs.ssh_dir }}"
+          if [ -n "$SSH_DIR" ] && [ -d "$SSH_DIR" ]; then
+            echo "Removing ephemeral SSH credentials directory: $SSH_DIR"
+            rm -rf "$SSH_DIR"
+            echo "Ephemeral SSH credentials removed."
+          fi

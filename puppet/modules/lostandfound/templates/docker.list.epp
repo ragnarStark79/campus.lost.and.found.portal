@@ -1,0 +1,2 @@
+<%- | String[1] $arch, String[1] $distro_codename | -%>
+deb [arch=<%= $arch %> signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu <%= $distro_codename %> stable

@@ -1,0 +1,29 @@
+---
+# ==============================================================================
+# Puppet 8 Hiera Common Data — Campus Lost and Found Portal
+# Environment: production
+#
+# This file stores durable configuration values managed by CI/CD and Puppet.
+# Application deployments atomically update 'lostandfound::image' here on
+# the Master, ensuring that subsequent agent runs preserve the deployed
+# version rather than reverting to a hardcoded default.
+# ==============================================================================
+
+# Application container image reference (updated by CI/CD deployment jobs)
+lostandfound::image: 'ghcr.io/ragnarstark79/campus.lost.and.found.portal:sha-0bf459f'
+
+# GHCR visibility flag (false = public package, true = authenticated private pull)
+lostandfound::image_is_private: false
+
+# Host TCP port exposed on EC2
+lostandfound::host_port: 5001
+
+# Container internal TCP port (Flask)
+lostandfound::container_port: 5000
+
+# Application deployment directories
+lostandfound::app_dir: '/opt/lostandfound'
+lostandfound::data_dir: '/opt/lostandfound/data'
+
+# Container environment
+lostandfound::flask_env: 'production'

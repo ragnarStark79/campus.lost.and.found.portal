@@ -39,17 +39,24 @@ id_dsa
 
 # ── Database ──────────────────────────────────────────────────
 *.db
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
-data/
+/data/
+puppet/data/nodes/
 
 # ── Terraform ─────────────────────────────────────────────────
+/terraform/
 *.tfstate
 *.tfstate.*
 *.tfvars
+*.tfvars.json
 !*.tfvars.example
 .terraform/
-.terraform.lock.hcl
+!.terraform.lock.hcl
+*.tfplan
+tfplan
 crash.log
 override.tf
 override.tf.json
@@ -58,6 +65,9 @@ override.tf.json
 
 # ── Docker ────────────────────────────────────────────────────
 docker/volumes/
+
+# documentations
+Phases Docs/
 
 # ── Testing / coverage ────────────────────────────────────────
 .pytest_cache/
@@ -92,4 +102,3 @@ logs/
 .AppleDouble
 .LSOverride
 desktop.ini
-

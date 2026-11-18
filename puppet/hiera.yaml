@@ -1,0 +1,16 @@
+---
+# ==============================================================================
+# Hiera 5 Configuration — Campus Lost and Found Portal (Phase 4 / Phase 5)
+# Environment: production
+# ==============================================================================
+version: 5
+defaults:
+  datadir: data
+  data_hash: yaml_data
+
+hierarchy:
+  - name: "Per-node data"
+    path: "nodes/%{trusted.certname}.yaml"
+
+  - name: "Common data"
+    path: "common.yaml"
