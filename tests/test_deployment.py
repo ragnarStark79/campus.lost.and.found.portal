@@ -10,8 +10,6 @@ import os
 import re
 import subprocess
 import pytest
-from app import create_app
-from app.config import TestingConfig
 from app.deployment import (
     load_deployment_metadata,
     parse_timestamp_to_ist,
@@ -19,19 +17,6 @@ from app.deployment import (
     DEFAULT_PATH,
     DEFAULT_PIPELINE,
 )
-
-
-@pytest.fixture
-def app():
-    """Create testing application instance."""
-    app = create_app(TestingConfig)
-    return app
-
-
-@pytest.fixture
-def client(app):
-    """Create test client."""
-    return app.test_client()
 
 
 def test_default_metadata_when_file_missing(monkeypatch, tmp_path):
